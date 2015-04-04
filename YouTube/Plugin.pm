@@ -167,13 +167,7 @@ sub urlHandler {
 	my ($client, $callback, $args) = @_;
 
 	my $url = 'youtube://' . $args->{'search'};
-	
-	#if URL is a full youtube URL, strip the ID part off it. URLs seem to come in with spaces instead of dots
-	(my $x1, my $x2, my $x3, my $x4, my $x5) = ($args->{'search'} =~ /(youtu be\/|youtube com\/(watch\?(.*&)?v=|(embed|v)\/))([^\?&"'>]+)/);
-        if ($x5) {
-                $url = 'youtube://' . $x5;
-        }
-        
+
 	# use metadata handler to get track info
 	Plugins::YouTube::ProtocolHandler->getMetadataFor(undef, $url, undef, undef, 
 		sub {
@@ -220,7 +214,7 @@ sub searchHandler {
 	# use paging on interfaces which allow otherwise fetch 200 entries for button mode
 	my $index    = ($args->{'index'} || 0) + 1;
 	my $quantity = $args->{'quantity'} || 200;
-	my $search   = $args->{'search'} ? ("q=" . URI::Escape::uri_escape_utf8($args->{search})) : '';
+	my $search   = $args->{'search'} ? "q=$args->{search}" : '';
 	$term ||= '';
 	
 	my $menu = [];
@@ -240,7 +234,7 @@ sub searchHandler {
 		if ($feed =~ /^http/) {
 			$queryUrl = "$feed&start-index=$i&max-results=$max&v=2&alt=json";
 		} else {
-			$queryUrl = "http://gdata.youtube.com/feeds/api/$feed?" . URI::Escape::uri_escape_utf8($term) . "&$search&start-index=$i&max-results=$max&v=2&alt=json";
+			$queryUrl = "http://gdata.youtube.com/feeds/api/$feed?$term&$search&start-index=$i&max-results=$max&v=2&alt=json";
 		}
 
 		$log->info("fetching: $queryUrl");

@@ -402,23 +402,19 @@ sub getNextTrack {
                 
                 # Replace known unicode characters
                 $vars{url_encoded_fmt_stream_map} =~ s/\\u0026/\&/g;
+                $vars{url_encoded_fmt_stream_map} =~ s/sig=/signature=/g;
                 $log->debug("url_encoded_fmt_stream_map: $vars{url_encoded_fmt_stream_map}");
             }
 
 			my $streams = uri_unescape($vars{url_encoded_fmt_stream_map});
-
-			for my $stream (split(/,/, $streams)) {
-				if ($stream =~ /^url=(.*)&itag=(.*)/) {
-					$streams{$2} = uri_unescape ($1);
-				}
- 			}
+			my %stream_hash = ($streams) =~ m/itag=(.+?)&url=(.+?=.+?)(?=,itag.+?)/ig;
 
 			# check streams in preferred id order
 			my @streamOrder = $prefs->get('prefer_lowbitrate') ? (5, 34) : (34, 35, 5);
 
 			for my $id (@streamOrder) {
-				if (my $stream = $streams{$id}) {
-					push @streams, { url => $streams{$id}, format => $id == 5 ? 'mp3' : 'aac' };
+				if (my $stream = $stream_hash{$id}) {
+					push @streams, { url => uri_unescape($stream_hash{$id}), format => $id == 5 ? 'mp3' : 'aac' };
 				}
 			}
 
