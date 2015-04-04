@@ -12,4 +12,7 @@
 		<minVersion>7.5</minVersion>
         <maxVersion>7.*</maxVersion>
 	</targetApplication>
+	<optionsURL>plugins/YouTube/settings/basic.html</optionsURL>
+  	<creator>Triode, murkle, djbloc, Daniel Vijge</creator>
+  	<email>spam+squeezebox@vijge.net</email>
 </extension>
