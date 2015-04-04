@@ -27,7 +27,7 @@ BEGIN {
 		'category'     => 'plugin.youtube',
 		'defaultLevel' => 'WARN',
 		'description'  => string('PLUGIN_YOUTUBE'),
-	}); 
+	});
 
 	# Always use OneBrowser version of XMLBrowser by using server or packaged version included with plugin
 	if (exists &Slim::Control::XMLBrowser::findAction) {
@@ -133,13 +133,13 @@ sub toplevel {
 	my ($client, $callback, $args) = @_;
 
 	$callback->([
-		{ name => string('PLUGIN_YOUTUBE_TOP'), type => 'link',   
+		{ name => string('PLUGIN_YOUTUBE_TOP'), type => 'link',
 		  url  => \&searchHandler, passthrough => [ 'standardfeeds/top_rated_Music', \&_parseVideos ], },
 
 		{ name => string('PLUGIN_YOUTUBE_POP'), type => 'link',
 		  url  => \&searchHandler, passthrough => [ 'standardfeeds/most_popular_Music', \&_parseVideos ], },
 
-		#{ name => string('PLUGIN_YOUTUBE_RECENT'), type => 'link', 
+		#{ name => string('PLUGIN_YOUTUBE_RECENT'), type => 'link',
 		#  url  => \&searchHandler,	passthrough => [ 'standardfeeds/most_recent_Music', \&_parseVideos ], },
 
 		{ name => string('PLUGIN_YOUTUBE_FAV'),  type => 'link',
@@ -169,7 +169,7 @@ sub urlHandler {
 	my $url = 'youtube://' . $args->{'search'};
 
 	# use metadata handler to get track info
-	Plugins::YouTube::ProtocolHandler->getMetadataFor(undef, $url, undef, undef, 
+	Plugins::YouTube::ProtocolHandler->getMetadataFor(undef, $url, undef, undef,
 		sub {
 			my $meta = shift;
 			if (keys %$meta) {
@@ -216,19 +216,19 @@ sub searchHandler {
 	my $quantity = $args->{'quantity'} || 200;
 	my $search   = $args->{'search'} ? "q=$args->{search}" : '';
 	$term ||= '';
-	
+
 	my $menu = [];
-	
+
 	# fetch in stages as api only allows 50 items per response, cli clients require $quantity responses which can be more than 50
 	my $fetch;
-	
+
 	# FIXME: this could be sped up by performing parallel requests once the number of responses is known??
 
 	$fetch = sub {
-		
+
 		my $i = $index + scalar @$menu;
 		my $max = min($quantity - scalar @$menu, 50); # api allows max of 50 items per response
-		
+
 		my $queryUrl;
 
 		if ($feed =~ /^http/) {
@@ -238,17 +238,17 @@ sub searchHandler {
 		}
 
 		$log->info("fetching: $queryUrl");
-		
+
 		Slim::Networking::SimpleAsyncHTTP->new(
-			
+
 			sub {
 				my $http = shift;
 				my $json = eval { from_json($http->content) };
-				
+
 				if ($@) {
 					$log->warn($@);
 				}
-				
+
 				my $before = scalar @$menu;
 
 				# parse json response into menu entries
@@ -257,14 +257,14 @@ sub searchHandler {
 				# Restrict responses to requested searchmax or 500
 				# Youtube API appears to be limited to 1000, but does not always return 1000 results so restrict to 500
 				my $total = min($json->{'feed'}->{'openSearch$totalResults'}->{'$t'}, $args->{'searchmax'} || 500, 500);
-				
+
 				$log->debug("this page: " . scalar @$menu . " total: $total");
 
 				if (scalar @$menu < $quantity && $total > $index + scalar @$menu && scalar @$menu > $before) {
-					
+
 					# get some more if we have yet to build the required page for client
 					$fetch->();
-					
+
 				} else {
 
 					$callback->({
@@ -274,15 +274,15 @@ sub searchHandler {
 					});
 				}
 			},
-			
+
 			sub {
 				$log->warn("error: $_[1]");
 				$callback->([ { name => $_[1], type => 'text' } ]);
 			},
-			
+
 		)->get($queryUrl);
 	};
-		
+
 	$fetch->();
 }
 
@@ -332,7 +332,7 @@ sub _parsePlaylists {
 
 sub trackInfoMenu {
 	my ($client, $url, $track, $remoteMeta) = @_;
-	
+
 	my $artist = ($remoteMeta && $remoteMeta->{artist}) || ($track && $track->artistName);
 
 	$artist = URI::Escape::uri_escape_utf8($artist);
@@ -357,7 +357,7 @@ sub trackInfoMenu {
 
 sub artistInfoMenu {
 	my ($client, $url, $obj, $remoteMeta) = @_;
-	
+
 	my $artist = ($remoteMeta && $remoteMeta->{artist}) || ($obj && $obj->name);
 
 	$artist = URI::Escape::uri_escape_utf8($artist);
@@ -437,7 +437,7 @@ sub searchInfoMenu {
 				type => 'link',
 				url  => sub {
 					my ($client, $callback, $args) = @_;
-					$args->{'search'} = $query; 
+					$args->{'search'} = $query;
 					my $cb = !$compat ? $callback : sub { $callback->(shift->{'items'}) };
 					searchHandler($client, $cb, $args, 'videos', \&_parseVideos);
 				},
@@ -448,7 +448,7 @@ sub searchInfoMenu {
 				type => 'link',
 				url  => sub {
 					my ($client, $callback, $args) = @_;
-					$args->{'search'} = $query; 
+					$args->{'search'} = $query;
 					my $cb = !$compat ? $callback : sub { $callback->(shift->{'items'}) };
 					searchHandler($client, $cb, $args, 'videos', \&_parseVideos, 'category=music');
 				},
@@ -461,7 +461,7 @@ sub searchInfoMenu {
 # special query to allow weblink to be sent to iPeng
 sub cliInfoQuery {
 	my $request = shift;
-	
+
 	if ($request->isNotQuery([['youtube'], ['info']])) {
 		$request->setStatusBadDispatch();
 		return;
@@ -473,7 +473,7 @@ sub cliInfoQuery {
 	$request->addResultLoop('item_loop', 0, 'weblink', "http://www.youtube.com/v/$id");
 	$request->addResult('count', 1);
 	$request->addResult('offset', 0);
-	
+
 	$request->setStatusDone();
 }
 

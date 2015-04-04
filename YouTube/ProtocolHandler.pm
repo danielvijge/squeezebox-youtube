@@ -46,7 +46,7 @@ sub new {
 		$args->{'url'} .= "&begin=" . int($newtime * 1000);
 
 		$song->can('startOffset') ? $song->startOffset($newtime) : $song->{startOffset} = $newtime;
-		
+
 		$args->{'client'}->master->remoteStreamStartTime(Time::HiRes::time() - $newtime);
 	}
 
@@ -71,11 +71,11 @@ sub new {
 			'streamBytes' => 0,       #  total bytes received for stream
 		};
 	}
-	
+
 	return $self;
 }
 
-sub formatOverride { 
+sub formatOverride {
 	my $class = shift;
 	my $song = shift;
 
@@ -94,7 +94,7 @@ sub canSeek { 1 }
 
 sub getSeekData {
 	my ($class, $client, $song, $newtime) = @_;
-	
+
 	return { timeOffset => $newtime };
 }
 
@@ -128,17 +128,17 @@ sub sysread {
 	} elsif (!$v->{'streaming'}) {
 
 		$log->debug("stream ended");
-		
+
 		$self->close;
-		
+
 		return 0;
 
 	} elsif (!$self->connected) {
-		
+
 		$log->debug("input socket not connected");
-		
+
 		$self->close;
-		
+
 		return 0;
 
 	} else {
@@ -162,7 +162,7 @@ sub processFLV {
 		if (length($v->{'inBuf'}) < MAX_INBUF && length($v->{'outBuf'}) < MAX_OUTBUF) {
 
 			my $bytes = CORE::sysread($self, $v->{'inBuf'}, MAX_READ, length($v->{'inBuf'}));
-			
+
 			if (defined $bytes) {
 
 				if ($bytes == 0) {
@@ -189,16 +189,16 @@ sub processFLV {
 
 		my $len = length($v->{'inBuf'});
 		my $next = $v->{'next'};
-		
+
 		if ($next == HEADER && $len >= 9) {
-			
+
 			my $sig    = substr($v->{'inBuf'}, 0, 3);
 			my $version= decode_u8(substr($v->{'inBuf'}, 3, 1));
 			my $flags  = decode_u8(substr($v-{'inBuf'}, 4, 1));
 			my $offset = decode_u32(substr($v->{'inBuf'}, 5, 4));
 			my $audio  = $flags & 0x04 ? 1 : 0;
 			my $video  = $flags & 0x01 ? 1 : 0;
-			
+
 			if ($sig ne 'FLV' && $version != 1) {
 				$log->info("non FLV stream sig: $sig version: $version - closing");
 				return 0;
@@ -208,23 +208,23 @@ sub processFLV {
 
 			$v->{'inBuf'} = substr($v->{'inBuf'}, $offset);
 			$v->{'next'}  = SIZE;
-			
+
 		} elsif ($next == SIZE && $len >= 4) {
-			
+
 			#my $size = decode_u32(substr($v->{'inBuf'}, 0, 4));
-			
+
 			$v->{'inBuf'} = substr($v->{'inBuf'}, 4);
 			$v->{'next'}  = TAG;
-			
+
 		} elsif ($next == TAG && $len >= 11) {
-			
+
 			my $flags = decode_u8(substr($v->{'inBuf'}, 0, 1));
 			my $filter= $flags & 0x20 ? 1 : 0;
 			my $type  = $flags & 0x1f;
 			my $size  = decode_u24(substr($v->{'inBuf'}, 1, 3));
-			
+
 			#$log->debug("Tag Header: flags: $flags filt: $filter type: $type size: $size");
-			
+
 			$v->{'tagSize'} = $size;
 			$v->{'inBuf'} = substr($v->{'inBuf'}, 11);
 			$v->{'next'}  = ($type == 8) ? AUDIO : DISCARD;
@@ -238,58 +238,58 @@ sub processFLV {
 				$log->info("closing stream - no audio");
 				return 0;
 			}
-			
+
 		} elsif ($next == DISCARD && $len >= $v->{'tagSize'}) {
-			
+
 			# discard as non audio tag
 			$v->{'inBuf'} = substr($v->{'inBuf'}, $v->{'tagSize'});
 			$v->{'next'}  = SIZE;
-			
+
 		} elsif ($next == AUDIO && $len >= $v->{'tagSize'}) {
-			
+
 			my $firstword = decode_u32(substr($v->{'inBuf'}, 0, 4));
-			
+
 			if (($firstword & 0xFFFF0000) == 0xAF010000) {      # AAC audio data
 
 				$log->debug("AAC Audio");
-				
+
 				my $header = $v->{'adtsbase'};
-				
-				# add framesize dependant portion	
+
+				# add framesize dependant portion
 				my $framesize = $v->{'tagSize'} - 2 + 7;
 				$header |= (
-					"\x00\x00\x00" . 
-						chr( (($framesize >> 11) & 0x03) ) . 
-						chr( (($framesize >> 3)  & 0xFF) ) . 
+					"\x00\x00\x00" .
+						chr( (($framesize >> 11) & 0x03) ) .
+						chr( (($framesize >> 3)  & 0xFF) ) .
 						chr( (($framesize << 5)  & 0xE0) )
 				);
-				
+
 				# add header and data to output buf
 				$v->{'outBuf'} .= $header;
 				$v->{'outBuf'} .= substr($v->{'inBuf'}, 2, $v->{'tagSize'} - 2);
 
 				$v->{'audioBytes'} += $v->{'tagSize'} - 2;
 
-				$v->{'audioseen'} ||= do { 
+				$v->{'audioseen'} ||= do {
 					$log->debug("audio seen");
-					${*$self}{'song'}->_playlist(0); 
+					${*$self}{'song'}->_playlist(0);
 					1;
 				};
 
-			} elsif (($firstword & 0xFFFF0000) == 0xAF000000) { # AAC Config 	
-				
+			} elsif (($firstword & 0xFFFF0000) == 0xAF000000) { # AAC Config
+
 				$log->debug("AAC Config");
-				
+
 				my $profile  = 1; # hard code to 1 rather than ($firstword & 0x0000f800) >> 11;
 				my $sr_index = ($firstword & 0x00000780) >>  7;
 				my $channels = ($firstword & 0x00000078) >>  3;
-				
+
 				$v->{'adtsbase'} =
 					chr( 0xFF ) .
 					chr( 0xF9 ) .
 					chr( (($profile << 6) & 0xC0) | (($sr_index << 2) & 0x3C) | (($channels >> 2) & 0x1) ) .
 					chr( (($channels << 6) & 0xC0) ) .
-					chr( 0x00 ) . 
+					chr( 0x00 ) .
 					chr( ((0x7FF >> 6) & 0x1F) ) .
 					chr( ((0x7FF << 2) & 0xFC) );
 
@@ -300,13 +300,13 @@ sub processFLV {
 				$v->{'outBuf'} .= substr($v->{'inBuf'}, 1, $v->{'tagSize'} - 1);
 				$v->{'audioBytes'} += $v->{'tagSize'} - 1;
 
-				$v->{'audioseen'} ||= do { 
+				$v->{'audioseen'} ||= do {
 					$log->debug("audio seen");
-					${*$self}{'song'}->_playlist(0); 
+					${*$self}{'song'}->_playlist(0);
 					1;
 				};
 			}
-			
+
 			$v->{'inBuf'} = substr($v->{'inBuf'}, $v->{'tagSize'});
 			$v->{'next'}  = SIZE;
 
@@ -354,7 +354,7 @@ sub getNextTrack {
 		}
 		return;
 	}
-	
+
 	my $masterUrl = $song->track()->url;
 	my $client    = $song->master();
 
@@ -390,33 +390,39 @@ sub getNextTrack {
 			my %vars;
 			my %streams;
 			my @streams;
-			
+
 			for my $var (split(/&/, $varsBlock)) {
 				my ($k, $v) = $var =~ /(.*)=(.*)/;
 				$vars{$k} = $v;
 			}
 
-            if (!defined $vars{url_encoded_fmt_stream_map}) {
-                # New web page layout uses HTML5 details
-                ($vars{url_encoded_fmt_stream_map}) = ($http->content =~ /\"url_encoded_fmt_stream_map\": \"(.*?)\"/);
-                
-                # Replace known unicode characters
-                $vars{url_encoded_fmt_stream_map} =~ s/\\u0026/\&/g;
-                $vars{url_encoded_fmt_stream_map} =~ s/sig=/signature=/g;
-                $log->debug("url_encoded_fmt_stream_map: $vars{url_encoded_fmt_stream_map}");
-            }
+                        if (!defined $vars{url_encoded_fmt_stream_map}) {
+                            # New web page layout uses HTML5 details
+                            ($vars{url_encoded_fmt_stream_map}) = ($http->content =~ /\"url_encoded_fmt_stream_map\": \"(.*?)\"/);
 
-			my $streams = uri_unescape($vars{url_encoded_fmt_stream_map});
-			my %stream_hash = ($streams) =~ m/itag=(.+?)&url=(.+?=.+?)(?=,itag.+?)/ig;
+                            # Replace known unicode characters
+                            $vars{url_encoded_fmt_stream_map} =~ s/\\u0026/\&/g;
+                            $vars{url_encoded_fmt_stream_map} =~ s/sig=/signature=/g;
+                            $log->debug("url_encoded_fmt_stream_map: $vars{url_encoded_fmt_stream_map}");
+                        }
 
-			# check streams in preferred id order
-			my @streamOrder = $prefs->get('prefer_lowbitrate') ? (5, 34) : (34, 35, 5);
+                        for my $stream (split(/,/, $vars{url_encoded_fmt_stream_map})) {
+                            no strict 'subs';
+                            my %props = map { split(/=/, $_) } split(/&/, $stream);
 
-			for my $id (@streamOrder) {
-				if (my $stream = $stream_hash{$id}) {
-					push @streams, { url => uri_unescape($stream_hash{$id}), format => $id == 5 ? 'mp3' : 'aac' };
-				}
-			}
+                            # check streams in preferred id order
+                            my @streamOrder = $prefs->get('prefer_lowbitrate') ? (5, 34) : (34, 35, 5);
+
+                            for my $id (@streamOrder) {
+                                    if ($id == $props{itag}) {
+                                            my $url = uri_unescape($props{url});
+                                            $url .="&signature=$props{signature}";
+
+                                            push @streams, { url => $url, format => $id == 5 ? 'mp3' : 'aac' };
+                                    }
+                            }
+
+                        }
 
 			# play the first stream
 			if (my $streamInfo = shift @streams) {
@@ -434,7 +440,7 @@ sub getNextTrack {
 		sub {
 			$errorCb->($_[1]);
 		},
-		
+
 	)->get($url);
 }
 
@@ -445,12 +451,12 @@ sub suppressPlayersMessage {
 	if ($string eq 'PROBLEM_OPENING' && scalar @{$song->pluginData('streams') || []}) {
 		return 1;
 	}
-	
+
 	return undef;
-}	
+}
 
 sub getMetadataFor {
-	my ($class, undef, $url, undef, $song, $cb) = @_; 
+	my ($class, undef, $url, undef, $song, $cb) = @_;
 
 	my $id = $class->_id($url) || return {};
 
@@ -460,7 +466,7 @@ sub getMetadataFor {
 		if ($song) {
 			$song->track->title($meta->{'title'});
 			$song->track->secs($meta->{'duration'});
-			Plugins::YouTube::Plugin->updateRecentlyPlayed({ 
+			Plugins::YouTube::Plugin->updateRecentlyPlayed({
 				url => $url, name => $meta->{_fulltitle} || $meta->{title}, icon => $meta->{icon}
 			});
 		}
@@ -518,7 +524,7 @@ sub getMetadataFor {
 				};
 
 				$meta->{_fulltitle} = $fulltitle if $fulltitle;
-				
+
 				if ($song) {
 					$song->track->title($meta->{'title'});
 					$song->track->secs($meta->{'duration'});
@@ -541,7 +547,7 @@ sub getMetadataFor {
 				$cb->({});
 			}
 		},
-		
+
 	)->get("http://gdata.youtube.com/feeds/api/videos/$id?v=2");
 
 	$fetching{$id} = 1;
