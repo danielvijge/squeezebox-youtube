@@ -14,7 +14,7 @@ cat <<EOF > public.xml
 	<plugins>
 		<plugin name="YouTube" version="$VERSION" minTarget="7.5" maxTarget="*">
 			<title lang="EN">YouTube</title>
-			<desc lang="EN">Browse, search and play urls from soundcloud</desc>
+			<desc lang="EN">Play audio from YouTube videos.  WARNING: this plugin will use more network bandwidth than other streaming services as the entire video is being streamed even though only the audio is played.</desc>
 			<url>http://danielvijge.github.io/squeezebox-youtube/YouTube-$VERSION.zip</url>
 			<link>https://github.com/danielvijge/squeezebox-youtube</link>
 			<sha>$SHA</sha>
