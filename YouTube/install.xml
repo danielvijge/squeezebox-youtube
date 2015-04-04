@@ -5,7 +5,7 @@
 	<module>Plugins::YouTube::Plugin</module>
 	<version>0.16</version>
 	<description>PLUGIN_YOUTUBE_DESC</description>
-	<icon>http://cssukgw.dyndns.org/squeezebox/images/youtube-v14-212.png</icon>
+	<icon>plugins/YouTube/icon.png</icon>
 	<defaultState>enabled</defaultState>
 	<targetApplication>
 		<id>SlimServer</id>
