@@ -1,0 +1,15 @@
+<extensions>
+	<details>
+		<title lang="EN">YouTube Plugin</title>
+	</details>
+	<plugins>
+		<plugin name="YouTube" version="0.17" minTarget="7.5" maxTarget="*">
+			<title lang="EN">YouTube</title>
+			<desc lang="EN">Browse, search and play urls from soundcloud</desc>
+			<url>http://danielvijge.github.io/squeezebox-youtube/YouTube-0.17.zip</url>
+			<link>https://github.com/danielvijge/squeezebox-youtube</link>
+			<sha>30ee527bd914c2ea4a007107ca62570d95fbb39b</sha>
+			<creator>Triode, murkle, djbloc, Daniel Vijge, Daniel P. Berrange</creator>
+		</plugin>
+	</plugins>
+</extensions>
