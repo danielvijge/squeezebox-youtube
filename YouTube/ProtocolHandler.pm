@@ -8,11 +8,14 @@ use List::Util qw(min max);
 use HTML::Parser;
 use URI::Escape;
 use XML::Simple;
+use JSON;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
+
+use Plugins::YouTube::Signature;
 
 use constant MAX_INBUF  => 102400;
 use constant MAX_OUTBUF => 4096;
@@ -110,7 +113,6 @@ sub sysread {
 	my $maxBytes = $_[2];
 
 	my $v = $self->vars;
-
 	$v->{'streaming'} &&= $self->processFLV;
 
 	my $len = length($v->{'outBuf'});
@@ -345,6 +347,7 @@ sub getNextTrack {
 
 	# play url from previously fetched list if we have yet to find a playable stream
 	if ($song->pluginData('streams')) {
+	        $log->debug("Trying cached stream");
 		if (my $streamInfo = shift @{$song->pluginData('streams')}) {
 			$song->pluginData(stream => $streamInfo->{'url'});
 			$song->pluginData(format => $streamInfo->{'format'});
@@ -360,7 +363,7 @@ sub getNextTrack {
 
 	my $id = $class->_id($masterUrl);
 
-	my $url = "http://www.youtube.com/watch?v=$id";
+	my $url = "https://www.youtube.com/watch?v=$id&gl=US&hl=en&has_verified=1&bpctr=9999999999";
 
 	$log->info("fetching: $id $url");
 
@@ -398,13 +401,25 @@ sub getNextTrack {
 
                         if (!defined $vars{url_encoded_fmt_stream_map}) {
                             # New web page layout uses HTML5 details
-                            ($vars{url_encoded_fmt_stream_map}) = ($http->content =~ /\"url_encoded_fmt_stream_map\": \"(.*?)\"/);
+                            ($vars{url_encoded_fmt_stream_map}) = ($http->content =~ /\"url_encoded_fmt_stream_map\":\s*\"(.*?)\"/);
 
                             # Replace known unicode characters
                             $vars{url_encoded_fmt_stream_map} =~ s/\\u0026/\&/g;
-                            $vars{url_encoded_fmt_stream_map} =~ s/sig=/signature=/g;
                             $log->debug("url_encoded_fmt_stream_map: $vars{url_encoded_fmt_stream_map}");
                         }
+			if (!defined $vars{player_url}) {
+			    ($vars{player_url}) = ($http->content =~ /"assets":.+?"js":\s*("[^"]+")/);
+
+			    if ($vars{player_url}) {
+				$vars{player_url} = from_json($vars{player_url}, {allow_nonref=>1});
+				if ($vars{player_url} =~ m,^//,) {
+				    $vars{player_url} = "https:" . $vars{player_url};
+				} elsif ($vars{player_url} =~ m,^/,) {
+				    $vars{player_url} = "https://www.youtube.com" . $vars{player_url};
+				}
+			    }
+			    $log->debug("player_url: $vars{player_url}");
+			}
 
                         for my $stream (split(/,/, $vars{url_encoded_fmt_stream_map})) {
                             no strict 'subs';
@@ -416,9 +431,22 @@ sub getNextTrack {
                             for my $id (@streamOrder) {
                                     if ($id == $props{itag}) {
                                             my $url = uri_unescape($props{url});
-                                            $url .="&signature=$props{signature}";
 
-                                            push @streams, { url => $url, format => $id == 5 ? 'mp3' : 'aac' };
+					    my $rawsig;
+					    my $encryptedsig = 0;
+					    if (exists $props{s}) {
+						$rawsig = $props{s};
+						$encryptedsig = 1;
+					    } elsif (exists $props{sig}) {
+						$rawsig = $props{sig};
+					    } else {
+						$rawsig = $props{signature};
+					    }
+					    $log->debug("sig $rawsig encrypted $encryptedsig");
+                                            push @streams, {
+						url => $url, format => $id == 5 ? 'mp3' : 'aac',
+						rawsig => $rawsig, encryptedsig => $encryptedsig,
+					    };
                                     }
                             }
 
@@ -426,18 +454,73 @@ sub getNextTrack {
 
 			# play the first stream
 			if (my $streamInfo = shift @streams) {
-				$song->pluginData(streams => \@streams);
-				$song->pluginData(stream  => $streamInfo->{'url'});
-				$song->pluginData(format  => $streamInfo->{'format'});
-				# ensure we fetch metadata for this stream
-				$class->getMetadataFor(undef, $masterUrl, undef, $song);
-				$successCb->();
+			        if ($streamInfo->{'encryptedsig'}) {
+				    if ($vars{player_url}) {
+					if (Plugins::YouTube::Signature::has_player($vars{player_url})) {
+					    $log->debug("Using cached player $vars{player_url}");
+					    my $sig = Plugins::YouTube::Signature::unobfuscate_signature(
+						$vars{player_url}, $streamInfo->{'rawsig'}
+						);
+					    $log->debug("Unobfuscated sig $sig");
+					    $song->pluginData(streams => \@streams);
+					    $song->pluginData(stream  => $streamInfo->{'url'} . "&signature=" . $sig);
+					    $song->pluginData(format  => $streamInfo->{'format'});
+					    # ensure we fetch metadata for this stream
+					    $class->getMetadataFor(undef, $masterUrl, undef, $song);
+					    $successCb->();
+					} else {
+					    $log->debug("Fetching new player $vars{player_url}");
+					    Slim::Networking::SimpleAsyncHTTP->new(
+						sub {
+						    my $http = shift;
+
+						    my $jscode = $http->content;
+
+						    eval {
+							$log->debug("Caching new player $vars{player_url}");
+							Plugins::YouTube::Signature::cache_player($vars{player_url}, $jscode);
+							$log->debug("Saved new player $vars{player_url}");
+						    };
+						    if ($@) {
+							$errorCb->("cannot load player code: $@");
+							return;
+						    }
+						    my $sig = Plugins::YouTube::Signature::unobfuscate_signature(
+							$vars{player_url}, $streamInfo->{'rawsig'}
+							);
+						    $log->debug("Unobfuscated sig $sig");
+						    $song->pluginData(streams => \@streams);
+						    $song->pluginData(stream  => $streamInfo->{'url'} . "&signature=" . $sig);
+						    $song->pluginData(format  => $streamInfo->{'format'});
+						    # ensure we fetch metadata for this stream
+						    $class->getMetadataFor(undef, $masterUrl, undef, $song);
+						    $successCb->();
+						},
+						sub {
+						    $log->debug("Cannot fetch player " . $_[1]);
+						    $errorCb->("cannot fetch player code");
+						},
+						)->get($vars{player_url});
+					}
+				    } else {
+					    $log->debug("No player url to unobfuscat sig");
+					    $errorCb->("no player url found");
+				    }
+				} else {
+				    $song->pluginData(streams => \@streams);
+				    $song->pluginData(stream  => $streamInfo->{'url'} . "&signature=" . $streamInfo->{'rawsig'});
+				    $song->pluginData(format  => $streamInfo->{'format'});
+				    # ensure we fetch metadata for this stream
+				    $class->getMetadataFor(undef, $masterUrl, undef, $song);
+				    $successCb->();
+				}
 			} else {
 				$errorCb->("no streams found");
 			}
 		},
 
 		sub {
+		        $log->debug("Cannot fetch stream " . $_[1]);
 			$errorCb->($_[1]);
 		},
 
