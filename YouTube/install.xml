@@ -3,7 +3,7 @@
 <extension>
 	<name>PLUGIN_YOUTUBE</name>
 	<module>Plugins::YouTube::Plugin</module>
-	<version>0.17</version>
+	<version>0.18</version>
 	<description>PLUGIN_YOUTUBE_DESC</description>
 	<icon>plugins/YouTube/icon.png</icon>
 	<defaultState>enabled</defaultState>

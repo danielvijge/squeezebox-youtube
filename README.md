@@ -10,15 +10,19 @@ Note: the creator of this repository is not the creator of the plugin. This repo
 This YouTube plugin requires that the Perl installation used to run
 the SlimServer have various 3rd party modules from CPAN installed:
 
+    IO::Socket::SSL
     Mozilla::CA
     Net::SSLeay
-    IO::Socket::SSL
-    JSON
 
+If you are running a Linux distribution, these libraries are already installed, or can easily be installed by
+your distribution's package manager. For example, on Debian based systems you can run
 
-If running on a normal Linux system these are usually already provided
-by your distro, but when running SSODS on the QNap NAS, it requires
-some extra effort
+    # apt-get install libssl-dev
+    # perl -MCPAN -e 'install IO::Socket::SSL'
+
+This will install all the required modules.
+
+If you are running SSODS on the QNap NAS, it requires some extra effort
 
 The folowing steps were tested on a QNap NAS running firmware 4.1.2
 
@@ -56,15 +60,6 @@ Change into the slimserver installation directory
     # wget http://search.cpan.org/CPAN/authors/id/S/SU/SULLR/IO-Socket-SSL-2.012.tar.gz
     # tar zxvf IO-Socket-SSL-2.012.tar.gz
     # cd IO-Socket-SSL-2.012
-    # ../../bin/perl Makefile.PL
-    # make
-    # make install
-    # cd ..
-
-
-    # wget  http://search.cpan.org/CPAN/authors/id/M/MA/MAKAMAKA/JSON-2.90.tar.gz
-    # tar zxvf JSON-2.90.tar.gz
-    # cd JSON-2.90
     # ../../bin/perl Makefile.PL
     # make
     # make install

@@ -8,7 +8,7 @@ use List::Util qw(min max);
 use HTML::Parser;
 use URI::Escape;
 use XML::Simple;
-use JSON;
+use JSON::XS::VersionOneAndTwo;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
@@ -411,7 +411,7 @@ sub getNextTrack {
 			    ($vars{player_url}) = ($http->content =~ /"assets":.+?"js":\s*("[^"]+")/);
 
 			    if ($vars{player_url}) {
-				$vars{player_url} = from_json($vars{player_url}, {allow_nonref=>1});
+				$vars{player_url} = decode_json($vars{player_url});
 				if ($vars{player_url} =~ m,^//,) {
 				    $vars{player_url} = "https:" . $vars{player_url};
 				} elsif ($vars{player_url} =~ m,^/,) {
