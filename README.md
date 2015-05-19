@@ -1,6 +1,9 @@
 YouTube Plugin README
 =====================
 
+**NOTE: This version of the YouTube plugin doesn't work. It uses version 2 of the YouTube API, which YouTube depricated on
+March 4, 2014, and disabled on April 20 2015.**
+
 This repository contains source code for SqueezeBox YouTube plugin.
 
 For more information, see http://forums.slimdevices.com/showthread.php?87731-Announce-YouTube-Plugin&highlight=youtube
