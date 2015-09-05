@@ -1,10 +1,7 @@
 YouTube Plugin README
 =====================
 
-**NOTE: This version of the YouTube plugin doesn't work. It uses version 2 of the YouTube API, which YouTube depricated on
-March 4, 2014, and disabled on April 20 2015.**
-
-**A newer version is the YouTube plugin, with support for the YouTube API v3 has been created by philippe_44. The new plugin can be installed from the default 3rd party plugin list. There is no need to add a custom repository. The source code for the new version can be found at http://sourceforge.net/projects/lms-youtube/**
+**NOTE: This version of the YouTube is a mirror of the YouTube plugin created by philippe_44. The original source code for this version can be found at http://sourceforge.net/projects/lms-youtube/**
 
 This repository contains source code for SqueezeBox YouTube plugin.
 
