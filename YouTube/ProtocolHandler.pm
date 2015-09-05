@@ -1,21 +1,19 @@
 package Plugins::YouTube::ProtocolHandler;
+use base qw(IO::Socket::SSL Slim::Formats::RemoteStream);
 
 use strict;
-
-use base qw(Slim::Formats::RemoteStream);
 
 use List::Util qw(min max);
 use HTML::Parser;
 use URI::Escape;
 use XML::Simple;
-use JSON::XS::VersionOneAndTwo;
+use Data::Dumper;
+use JSON::XS;
 
 use Slim::Utils::Log;
 use Slim::Utils::Prefs;
 use Slim::Utils::Errno;
 use Slim::Utils::Cache;
-
-use Plugins::YouTube::Signature;
 
 use constant MAX_INBUF  => 102400;
 use constant MAX_OUTBUF => 4096;
@@ -35,13 +33,83 @@ my %fetching; # hash of ids we are fetching metadata for to avoid multiple fetch
 
 Slim::Player::ProtocolHandlers->registerHandler('youtube', __PACKAGE__);
 
+sub crackURL {
+	my ($string) = @_;
+
+	my $urlstring = "https";
+
+	$string =~ m|(?:$urlstring)://(?:([^\@:]+):?([^\@]*)\@)?([^:/]+):*(\d*)(\S*)|i;
+		
+	my ($user, $pass, $host, $port, $path) = ($1, $2, $3, $4, $5);
+
+	$path ||= '/';
+	$port ||= 443;
+	
+	return ($host, $port, $path, $user, $pass);
+}
+
+sub open {
+	my $class = shift;
+	my $args  = shift;
+
+	my $url   = $args->{'url'};
+
+	my ($server, $port, $path, $user, $password) = crackURL($url);
+
+	if (!$server || !$port) {
+
+		$log->error("Couldn't find server or port in url: [$url]");
+		return;
+	}
+
+	my $timeout = 15;
+	
+	$log->info("Opening connection to $url: [$server on port $port with path $path with timeout $timeout]");
+
+	my $sock = $class->SUPER::new(
+		Timeout	  => $timeout,
+		PeerAddr => $server,
+		PeerPort => $port,
+		SSL_startHandshake => 1,
+		SSL_verify_mode => 'SSL_VERIFY_NONE',
+	
+	) or do {
+
+		$log->error("Couldn't create socket binding to $main::localStreamAddr with timeout: $timeout - $!");
+		return undef;
+	};
+
+	# store a IO::Select object in ourself.
+	# used for non blocking I/O
+	${*$sock}{'_sel'} = IO::Select->new($sock);
+	${*$sock}{'song'} = $args->{'song'};
+	
+	
+	#$log->debug("in open ref sock: ", ref $sock, "(D)", Dumper($sock));
+	#$log->debug("in open ref class: ", ref $class, "(D)", Dumper($class));
+
+=comment
+	#this is proven to work, the socket is open and connected
+	my $c;
+	print $sock "HEAD / HTTP/1.0\r\n\r\n";
+	while (!$c) {
+		$sock->SUPER::sysread($c, 10);
+	}
+	$log->info("test string: $c");
+=cut
+
+	return $sock->request($args);
+
+}
+
+
 sub new {
 	my $class = shift;
 	my $args  = shift;
 
 	my $song       = $args->{'song'};
 	$args->{'url'} = $song->pluginData('stream');
-
+	
 	my $seekdata   = $song->can('seekdata') ? $song->seekdata : $song->{'seekdata'};
 
 	if (my $newtime = $seekdata->{'timeOffset'}) {
@@ -54,8 +122,10 @@ sub new {
 	}
 
 	$log->info("url: $args->{url}");
-
+		
+	#$log->debug("in new class ref: ", ref $class);
 	my $self = $class->open($args);
+	#$log->debug("in new ref class: ", ref $self, "(D)", Dumper($self));
 
 	if (defined($self)) {
 		${*$self}{'client'}  = $args->{'client'};
@@ -87,7 +157,12 @@ sub formatOverride {
 
 sub isAudio { 1 }
 
-sub requestString { shift; Slim::Player::Protocols::HTTP->requestString(@_) }
+sub requestString { 
+	shift; 
+	Slim::Player::Protocols::HTTP->requestString(@_);
+}
+
+#sub request { shift; Slim::Formats::RemoteStream->request(@_) }
 
 sub parseHeaders {}
 
@@ -113,7 +188,14 @@ sub sysread {
 	my $maxBytes = $_[2];
 
 	my $v = $self->vars;
+	
+	if (!$v) {
+		my $nb = $self->SUPER::sysread($_[1], $maxBytes);
+		return $nb;
+	}	
+	
 	$v->{'streaming'} &&= $self->processFLV;
+	#$log->debug("in sysread class ref: ", ref $self, " (D) => ", Dumper($self));
 
 	my $len = length($v->{'outBuf'});
 
@@ -158,12 +240,14 @@ sub processFLV {
 
 	my $v = $self->vars;
 
+	$log->debug('processing FLV');
+	
 	while (1) {
 
 		# fetch some more from input socket until we have moved too much
 		if (length($v->{'inBuf'}) < MAX_INBUF && length($v->{'outBuf'}) < MAX_OUTBUF) {
 
-			my $bytes = CORE::sysread($self, $v->{'inBuf'}, MAX_READ, length($v->{'inBuf'}));
+			my $bytes = $self->SUPER::sysread($v->{'inBuf'}, MAX_READ, length($v->{'inBuf'}));
 
 			if (defined $bytes) {
 
@@ -206,7 +290,7 @@ sub processFLV {
 				return 0;
 			}
 
-			$log->debug("Header: sig: $sig version: $version flags: $flags (audio: $audio video: $video) offset: $offset");
+			$log->info("Header: sig: $sig version: $version flags: $flags (audio: $audio video: $video) offset: $offset");
 
 			$v->{'inBuf'} = substr($v->{'inBuf'}, $offset);
 			$v->{'next'}  = SIZE;
@@ -225,7 +309,7 @@ sub processFLV {
 			my $type  = $flags & 0x1f;
 			my $size  = decode_u24(substr($v->{'inBuf'}, 1, 3));
 
-			#$log->debug("Tag Header: flags: $flags filt: $filter type: $type size: $size");
+			$log->debug("Tag Header: flags: $flags filt: $filter type: $type size: $size");
 
 			$v->{'tagSize'} = $size;
 			$v->{'inBuf'} = substr($v->{'inBuf'}, 11);
@@ -329,11 +413,16 @@ sub _id {
 	my ($class, $url) = @_;
 
 	$url .= '&';
-
-	if ($url =~ /^youtube:\/\/http:\/\/www\.youtube\.com\/watch\?v=(.*)&/ || $url =~ /^youtube:\/\/(.*)&/) {
+	## also youtube://http://www youtube com/watch?v=tU0_rKD8qjw
+		
+	if ($url =~ /^youtube:\/\/https?:\/\/www\.youtube\.com\/watch\?v=(.*)&/ || 
+		$url =~ /^youtube:\/\/www\.youtube\.com\/v\/(.*)&/ ||
+		$url =~ /^youtube:\/\/(.*)&/) {
+	#if ($url =~ /^youtube:\/\/www\.youtube\.com\/v\/(.*)&/) {
+		$log->debug("parsed id: $url");
 		return $1;
 	}
-
+	
 	return undef;
 }
 
@@ -345,9 +434,9 @@ sub isRepeatingStream { 1 }
 sub getNextTrack {
 	my ($class, $song, $successCb, $errorCb) = @_;
 
+	$log->debug('getNextTrack');
 	# play url from previously fetched list if we have yet to find a playable stream
 	if ($song->pluginData('streams')) {
-	        $log->debug("Trying cached stream");
 		if (my $streamInfo = shift @{$song->pluginData('streams')}) {
 			$song->pluginData(stream => $streamInfo->{'url'});
 			$song->pluginData(format => $streamInfo->{'format'});
@@ -359,11 +448,12 @@ sub getNextTrack {
 	}
 
 	my $masterUrl = $song->track()->url;
+	$log->info("master fetching: $masterUrl");
 	my $client    = $song->master();
 
 	my $id = $class->_id($masterUrl);
 
-	my $url = "https://www.youtube.com/watch?v=$id&gl=US&hl=en&has_verified=1&bpctr=9999999999";
+	my $url = "http://www.youtube.com/watch?v=$id";
 
 	$log->info("fetching: $id $url");
 
@@ -401,25 +491,13 @@ sub getNextTrack {
 
                         if (!defined $vars{url_encoded_fmt_stream_map}) {
                             # New web page layout uses HTML5 details
-                            ($vars{url_encoded_fmt_stream_map}) = ($http->content =~ /\"url_encoded_fmt_stream_map\":\s*\"(.*?)\"/);
+                            ($vars{url_encoded_fmt_stream_map}) = ($http->content =~ /\"url_encoded_fmt_stream_map\":\"(.*?)\"/);
 
                             # Replace known unicode characters
                             $vars{url_encoded_fmt_stream_map} =~ s/\\u0026/\&/g;
+                            $vars{url_encoded_fmt_stream_map} =~ s/sig=/signature=/g;
                             $log->debug("url_encoded_fmt_stream_map: $vars{url_encoded_fmt_stream_map}");
                         }
-			if (!defined $vars{player_url}) {
-			    ($vars{player_url}) = ($http->content =~ /"assets":.+?"js":\s*("[^"]+")/);
-
-			    if ($vars{player_url}) {
-				$vars{player_url} = decode_json($vars{player_url});
-				if ($vars{player_url} =~ m,^//,) {
-				    $vars{player_url} = "https:" . $vars{player_url};
-				} elsif ($vars{player_url} =~ m,^/,) {
-				    $vars{player_url} = "https://www.youtube.com" . $vars{player_url};
-				}
-			    }
-			    $log->debug("player_url: $vars{player_url}");
-			}
 
                         for my $stream (split(/,/, $vars{url_encoded_fmt_stream_map})) {
                             no strict 'subs';
@@ -430,23 +508,11 @@ sub getNextTrack {
 
                             for my $id (@streamOrder) {
                                     if ($id == $props{itag}) {
+											$log->debug("props: $props{url}");
                                             my $url = uri_unescape($props{url});
+											$url .="&signature=$props{signature}";
 
-					    my $rawsig;
-					    my $encryptedsig = 0;
-					    if (exists $props{s}) {
-						$rawsig = $props{s};
-						$encryptedsig = 1;
-					    } elsif (exists $props{sig}) {
-						$rawsig = $props{sig};
-					    } else {
-						$rawsig = $props{signature};
-					    }
-					    $log->debug("sig $rawsig encrypted $encryptedsig");
-                                            push @streams, {
-						url => $url, format => $id == 5 ? 'mp3' : 'aac',
-						rawsig => $rawsig, encryptedsig => $encryptedsig,
-					    };
+                                            push @streams, { url => $url, format => $id == 5 ? 'mp3' : 'aac' };
                                     }
                             }
 
@@ -454,77 +520,24 @@ sub getNextTrack {
 
 			# play the first stream
 			if (my $streamInfo = shift @streams) {
-			        if ($streamInfo->{'encryptedsig'}) {
-				    if ($vars{player_url}) {
-					if (Plugins::YouTube::Signature::has_player($vars{player_url})) {
-					    $log->debug("Using cached player $vars{player_url}");
-					    my $sig = Plugins::YouTube::Signature::unobfuscate_signature(
-						$vars{player_url}, $streamInfo->{'rawsig'}
-						);
-					    $log->debug("Unobfuscated sig $sig");
-					    $song->pluginData(streams => \@streams);
-					    $song->pluginData(stream  => $streamInfo->{'url'} . "&signature=" . $sig);
-					    $song->pluginData(format  => $streamInfo->{'format'});
-					    # ensure we fetch metadata for this stream
-					    $class->getMetadataFor(undef, $masterUrl, undef, $song);
-					    $successCb->();
-					} else {
-					    $log->debug("Fetching new player $vars{player_url}");
-					    Slim::Networking::SimpleAsyncHTTP->new(
-						sub {
-						    my $http = shift;
-
-						    my $jscode = $http->content;
-
-						    eval {
-							$log->debug("Caching new player $vars{player_url}");
-							Plugins::YouTube::Signature::cache_player($vars{player_url}, $jscode);
-							$log->debug("Saved new player $vars{player_url}");
-						    };
-						    if ($@) {
-							$errorCb->("cannot load player code: $@");
-							return;
-						    }
-						    my $sig = Plugins::YouTube::Signature::unobfuscate_signature(
-							$vars{player_url}, $streamInfo->{'rawsig'}
-							);
-						    $log->debug("Unobfuscated sig $sig");
-						    $song->pluginData(streams => \@streams);
-						    $song->pluginData(stream  => $streamInfo->{'url'} . "&signature=" . $sig);
-						    $song->pluginData(format  => $streamInfo->{'format'});
-						    # ensure we fetch metadata for this stream
-						    $class->getMetadataFor(undef, $masterUrl, undef, $song);
-						    $successCb->();
-						},
-						sub {
-						    $log->debug("Cannot fetch player " . $_[1]);
-						    $errorCb->("cannot fetch player code");
-						},
-						)->get($vars{player_url});
-					}
-				    } else {
-					    $log->debug("No player url to unobfuscat sig");
-					    $errorCb->("no player url found");
-				    }
-				} else {
-				    $song->pluginData(streams => \@streams);
-				    $song->pluginData(stream  => $streamInfo->{'url'} . "&signature=" . $streamInfo->{'rawsig'});
-				    $song->pluginData(format  => $streamInfo->{'format'});
-				    # ensure we fetch metadata for this stream
-				    $class->getMetadataFor(undef, $masterUrl, undef, $song);
-				    $successCb->();
-				}
+				$song->pluginData(streams => \@streams);
+				$song->pluginData(stream  => $streamInfo->{'url'});
+				$song->pluginData(format  => $streamInfo->{'format'});
+				# ensure we fetch metadata for this stream
+				$class->getMetadataFor(undef, $masterUrl, undef, $song);
+				$successCb->();
 			} else {
 				$errorCb->("no streams found");
 			}
 		},
 
 		sub {
-		        $log->debug("Cannot fetch stream " . $_[1]);
 			$errorCb->($_[1]);
 		},
 
 	)->get($url);
+	
+	$log->debug("getNextTrack url: $url");
 }
 
 sub suppressPlayersMessage {
@@ -538,12 +551,15 @@ sub suppressPlayersMessage {
 	return undef;
 }
 
-sub getMetadataFor {
+
+sub getMetadataForV2 {
 	my ($class, undef, $url, undef, $song, $cb) = @_;
 
 	my $id = $class->_id($url) || return {};
-
+	
+	
 	my $cache = Slim::Utils::Cache->new;
+	
 
 	if (my $meta = $cache->get("yt:meta-$id")) {
 		if ($song) {
@@ -565,12 +581,21 @@ sub getMetadataFor {
 		return {}
 	}
 
+	
+	
+	
 	$log->info("fetching metadata for $id");
+	
+	
 
 	Slim::Networking::SimpleAsyncHTTP->new(
 
 		sub {
 			my $http = shift;
+
+			
+			### it now in json form
+			
 			my $xml  = eval { XMLin($http->content) };
 
 			delete $fetching{$id};
@@ -631,10 +656,144 @@ sub getMetadataFor {
 			}
 		},
 
-	)->get("http://gdata.youtube.com/feeds/api/videos/$id?v=2");
 
+	)->get("http://gdata.youtube.com/feeds/api/videos/$id?v=2");
+	
 	$fetching{$id} = 1;
 
+	return undef if ($cb);
+
+	return {};
+}
+
+
+sub getMetadataFor {
+	my ($class, undef, $url, undef, $song, $cb) = @_;
+
+	$log->debug("getmetadata: $url");
+	#return {};
+	
+	my $id = $class->_id($url) || return {};
+	
+	###Plugins::YouTube::Plugin::_debug(['vurl',$id,$url]);return {};
+
+	my $cache = Slim::Utils::Cache->new;
+	##Plugins::YouTube::Plugin::_debug(['vurl',$id,$cache->get("yt:meta-$id")]); return {};
+	if (my $meta = $cache->get("yt:meta-$id")) {
+		if ($song) {
+			$song->track->title($meta->{'title'});
+			$song->track->secs($meta->{'duration'});
+			Plugins::YouTube::Plugin->updateRecentlyPlayed({
+				url => $url, name => $meta->{_fulltitle} || $meta->{title}, icon => $meta->{icon}
+			});
+		}
+		if ($cb) {
+			$cb->($meta);
+			return undef;
+		}
+		return $meta;
+	}
+
+	if ($fetching{$id} && !defined $cb) {
+		$log->debug("already fetching metadata for $id");
+		return {}
+	}
+	
+	###part=contentDetails&id=$vId&key=dldfsd981asGhkxHxFf6JqyNrTqIeJ9sjMKFcX4");
+
+	my $vurl = $prefs->get('APIurl') . "/videos/?part=snippet,contentDetails&id=$id&key=" .$prefs->get('APIkey');
+
+	$log->info("fetching metadata for $id");
+	
+	###Plugins::YouTube::Plugin::_debug(['vurl',$id,$vurl]);return {};
+
+	Slim::Networking::SimpleAsyncHTTP->new(
+
+		sub {
+			my $http = shift;
+			
+			### it now in json form
+			
+			my $json = eval { decode_json($http->content) };
+				
+			###$log->warn("json::" . $http->content);
+
+			
+			
+			if ($@) {
+				$log->warn($@);
+			}
+			
+
+			delete $fetching{$id};
+
+			
+
+			my $cover; my $icon;
+			
+			### all are in 'items'->[0]
+			
+			my $vdetail = $json->{items}->[0] or return;
+			
+			my $snippet=$vdetail->{snippet} or return;
+			
+			$icon = $snippet->{thumbnails}->{default}->{url};
+			$cover = $snippet->{thumbnails}->{high}->{url};
+
+
+			my $title  = $snippet->{'title'};
+			my $artist = "";###$xml->{'author'}->{'name'};
+			my $fulltitle;
+
+			if ($title =~ /(.*) - (.*)/) {
+				$fulltitle = $title;
+				$artist = $1;
+				$title  = $2;
+			}
+			my $duration=$vdetail->{contentDetails}->{duration};
+			if ($duration && $title) {
+				my $meta = {
+					title    =>	$title,
+					artist   => $artist,
+					duration => $duration,
+					icon     => $icon,
+					cover    => $cover || $icon,
+					type     => 'YouTube',
+				};
+
+				$meta->{_fulltitle} = $fulltitle if $fulltitle;
+
+				if ($song) {
+					$song->track->title($meta->{'title'});
+					$song->track->secs($meta->{'duration'});
+					Plugins::YouTube::Plugin->updateRecentlyPlayed({ url => $url, name => $fulltitle || $title, icon => $icon });
+				}
+
+				$cache->set("yt:meta-$id", $meta, 86400);
+
+				if ($cb) {
+					$cb->($meta);
+					return;
+				}
+			}
+		},
+
+		sub {
+			$log->warn("error: $_[1]");
+			delete $fetching{$id};
+			if ($cb) {
+				$cb->({});
+			}
+		},
+
+	)->get($vurl);
+
+	## v2
+	##http://gdata.youtube.com/feeds/api/videos/$id?v=2
+	###$prefs->get('APIkey')
+	$fetching{$id} = 1;
+
+	$log->debug("getMetaDataFor vurl: $vurl");
 	return undef if ($cb);
 
 	return {};

@@ -11,5 +11,11 @@
 		</div>
 
 	[% END %]
+	
+	[% WRAPPER setting title="PLUGIN_YOUTUBE_APIKEY" desc="PLUGIN_YOUTUBE_APIKEY_DESC" %]
+
+		<input type="text" class="stdedit" name="APIkey" id="APIkey" value="[% APIkey %]" size="40">
+
+	[% END %]
 
 [% PROCESS settings/footer.html %]

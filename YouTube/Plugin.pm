@@ -44,7 +44,7 @@ BEGIN {
 
 my $prefs = preferences('plugin.youtube');
 
-$prefs->init({ prefer_lowbitrate => 0, recent => [] });
+$prefs->init({ prefer_lowbitrate => 0, recent => [], APIkey => '', APIurl => 'https://www.googleapis.com/youtube/v3' });
 
 tie my %recentlyPlayed, 'Tie::Cache::LRU', 20;
 
@@ -168,6 +168,10 @@ sub urlHandler {
 
 	my $url = 'youtube://' . $args->{'search'};
 
+	#because search replaces '.' by ' '
+	$url =~ s/ /./g;
+	
+	$log->debug("urlHandler: $args->{'search'}");
 	# use metadata handler to get track info
 	Plugins::YouTube::ProtocolHandler->getMetadataFor(undef, $url, undef, undef,
 		sub {
@@ -214,7 +218,11 @@ sub searchHandler {
 	# use paging on interfaces which allow otherwise fetch 200 entries for button mode
 	my $index    = ($args->{'index'} || 0) + 1;
 	my $quantity = $args->{'quantity'} || 200;
-	my $search   = $args->{'search'} ? "q=$args->{search}" : '';
+	my $search   = $args->{'search'} ? "$args->{search}" : '';
+	##$search=~ s/([^a-zA-Z0-9])/sprintf("%%%2X",ord($1))/sge;
+	$search=URI::Escape::uri_escape_utf8($search);
+	
+	$search="q=$search";
 	$term ||= '';
 
 	my $menu = [];
@@ -232,19 +240,49 @@ sub searchHandler {
 		my $queryUrl;
 
 		if ($feed =~ /^http/) {
-			$queryUrl = "$feed&start-index=$i&max-results=$max&v=2&alt=json";
+			$queryUrl = "$feed&start-index=$i&maxResults=$max&v=2&alt=json";
 		} else {
-			$queryUrl = "http://gdata.youtube.com/feeds/api/$feed?$term&$search&start-index=$i&max-results=$max&v=2&alt=json";
+		
+			##$queryUrl = "http://gdata.youtube.com/feeds/api/$feed?$term&$search&start-index=$i&max-results=$max&v=2&alt=json";
+			my $apiurl = $prefs->get('APIurl') . "/search/?";
+			if($feed =~ /(rated|favorites|popular)/){
+				$apiurl = $prefs->get('APIurl') . "/guideCategories/?";
+			}elsif($feed =~ /(channel|playlist)/){
+				$apiurl .="type=$1&"; 
+			}
+			
+			$queryUrl="$apiurl";
+			if($term){
+				$queryUrl.="$term&";
+			}
+			$queryUrl.="$search&start-index=$i&maxResults=$max&v=2&alt=json&part=id,snippet&key=" . $prefs->get('APIkey');
+			
+			
+			
 		}
 
 		$log->info("fetching: $queryUrl");
+		#$log->debug(" debug fetching: $queryUrl");
+		##print STDERR "\nqueryUrl fetching: $queryUrl \n";
+		#$log->warn(" warn fetching: $queryUrl");
+		###'REMOTE_PORT' => '57643',
+        ##  'HTTP_USER_AGENT' => 'iTunes/4.7.1 (Linux; N; Debian; x86_64-linux; EN; utf8) SqueezeCenter, Squeezebox Server, Logitech Media Server/7.9.0/1440053825',
+
+		_debug('queryUrl',$feed,$queryUrl);
+		
 
 		Slim::Networking::SimpleAsyncHTTP->new(
 
 			sub {
 				my $http = shift;
+				
+				##$log->warn("result: " . $http->content);
+				###return {};
 				my $json = eval { from_json($http->content) };
+				
+				###$log->warn("json::" . $http->content);
 
+				
 				if ($@) {
 					$log->warn($@);
 				}
@@ -252,7 +290,10 @@ sub searchHandler {
 				my $before = scalar @$menu;
 
 				# parse json response into menu entries
-				$parser->($json->{'feed'}, $menu);
+				##$parser->($json->{'feed'}, $menu);
+				$parser->($json, $menu);
+				##_debug('Parsed json',$json);
+				##_debug('Parsed results',$menu);
 
 				# Restrict responses to requested searchmax or 500
 				# Youtube API appears to be limited to 1000, but does not always return 1000 results so restrict to 500
@@ -276,7 +317,9 @@ sub searchHandler {
 			},
 
 			sub {
-				$log->warn("error: $_[1]");
+				###use Data::Dumper;
+				###$log->warn("error: $_[1] " . Dumper([@_]));
+				$log->warn("error: $_[1] ");
 				$callback->([ { name => $_[1], type => 'text' } ]);
 			},
 
@@ -286,7 +329,7 @@ sub searchHandler {
 	$fetch->();
 }
 
-sub _parseVideos {
+sub _parseVideosV2 {
 	my ($json, $menu) = @_;
 	for my $entry (@{$json->{'entry'} || []}) {
 		my $mg = $entry->{'media$group'};
@@ -302,8 +345,54 @@ sub _parseVideos {
 	}
 }
 
+sub _parseVideos {
+	my ($json, $menu) = @_;
+	for my $entry (@{$json->{'items'} || []}) {
+		my $mg = $entry->{'snippet'};
+		my $vurl = "www.youtube.com/v/$entry->{id}->{videoId}";
+		push @$menu, {
+			name => $mg->{'title'},
+			type => 'audio',
+			on_select => 'play',
+			playall => 0,
+			url  => 'youtube://' . $vurl,
+			play => 'youtube://' . $vurl,
+			icon => $mg->{'thumbnails'}->{'default'}->{'url'},
+		};
+	}
+	
+	
+}
+
+sub _debug{
+	
+	use Data::Dumper;
+	
+	print STDERR Dumper([caller,@_]);
+
+}
 sub _parseChannels {
 	my ($json, $menu) = @_;
+	###_debug('_parseChannels',$json);
+	
+	for my $entry (@{$json->{'items'} || []}) {
+		my $title = $entry->{'snippet'}->{'title'} || $entry->{'snippet'}->{'description'} || 'No Title';
+		$title = Slim::Formats::XML::unescapeAndTrim($title);
+		my $id=$entry->{id}->{videoId};
+		push @$menu, {
+			name => $title,
+			type => 'link',
+			url  => \&searchHandler,
+			passthrough => [ $prefs->{APIurl} . "/channels/?parts=snippet&id=$id&key=" . $prefs->{APIkey}, \&_parseVideos ],
+		};
+	}
+	
+	###_debug('_parseChannels results',$menu);
+}
+sub _parseChannelsV2 {
+	my ($json, $menu) = @_;
+	###_debug('_parseChannels',$json);
+	
 	for my $entry (@{$json->{'entry'} || []}) {
 		my $title = $entry->{'title'}->{'$t'} || $entry->{'summary'}->{'$t'} || 'No Title';
 		$title = Slim::Formats::XML::unescapeAndTrim($title);
@@ -316,8 +405,13 @@ sub _parseChannels {
 	}
 }
 
+
 sub _parsePlaylists {
-	my ($json, $menu) = @_;
+	my ($json, $menu) = @_;	
+	## for my laziness
+	return _parseChannels($json, $menu);
+	
+	
 	for my $entry (@{$json->{'entry'} || []}) {
 		my $title = $entry->{'title'}->{'$t'} || $entry->{'summary'}->{'$t'} || 'No Title';
 		$title = Slim::Formats::XML::unescapeAndTrim($title);
@@ -383,6 +477,11 @@ sub artistInfoMenu {
 sub webVideoLink {
 	my ($client, $url) = @_;
 
+	
+
+#	_debug('webVideoLink',$url);
+
+	
 	if (my $id = Plugins::YouTube::ProtocolHandler->_id($url)) {
 
 		my $show;
