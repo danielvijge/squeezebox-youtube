@@ -3,19 +3,10 @@ PLUGIN_YOUTUBE
 
 PLUGIN_YOUTUBE_DESC
 	EN	Play audio from YouTube videos.  WARNING: this plugin will use more network bandwidth than other streaming services as the entire video is being streamed even though only the audio is played.	Updated to API v3
-
-PLUGIN_YOUTUBE_TOP
-	EN	Top Rated Music
-
-PLUGIN_YOUTUBE_POP
-	EN	Most Popular Music
-
-PLUGIN_YOUTUBE_RECENT
-	EN	Most Recent Music
-
-PLUGIN_YOUTUBE_FAV
-	EN	Favorite Music
-
+	
+PLUGIN_YOUTUBE_MISSINGKEY
+	EN	Missing YouTube API key (see settings)
+	
 PLUGIN_YOUTUBE_SEARCH
 	EN	YouTube Search
 
@@ -27,6 +18,12 @@ PLUGIN_YOUTUBE_CHANNELSEARCH
 
 PLUGIN_YOUTUBE_PLAYLISTSEARCH
 	EN	Playlist Search
+	
+PLUGIN_YOUTUBE_VIDEOCATEGORIES
+	EN	Video Categories
+	
+PLUGIN_YOUTUBE_GUIDECATEGORIES
+	EN	Guide Categories
 
 PLUGIN_YOUTUBE_RECENTLYPLAYED
 	EN	Recently Played
@@ -67,3 +64,14 @@ PLUGIN_YOUTUBE_APIKEY
 PLUGIN_YOUTUBE_APIKEY_DESC
 	EN	YouTube API v3 needs a key to access. Goto https://console.developers.google.com/start
 
+PLUGIN_YOUTUBE_MAXITEMS
+	EN	Items per search
+
+PLUGIN_YOUTUBE_MAXITEMS_DESC
+	EN	Maximum number of items a search can return
+	
+PLUGIN_YOUTUBE_COUNTRY
+	EN	Country for categories
+
+PLUGIN_YOUTUBE_COUNTRY_DESC
+	EN	Set the 2-letters country use to search available categories
