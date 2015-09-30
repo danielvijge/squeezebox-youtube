@@ -1,3 +1,10 @@
+0.30
+ - Major refactor by Michael
+ - Channel/Playlist can be played directly as playlist
+ - Get video icons in the search results
+ - Caching of searches (cache can be flushed in settings)
+ - Get metadata for the whole playlist
+ 
 0.27
  - Handle HTTP redirect
  - Country taken from system
@@ -6,7 +13,7 @@
  - Remove wrong SSL parameter on opening
  
 0.26
- - JSinterpret was using JSON and not JSON:XS which seems to not be available on some linux 
+ - JSinterpret was using JSON and not JSON:XS which seems to not be available on some Linux 
  
 0.25
  - Use JSON::XS so move from_json to json_decode
