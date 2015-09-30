@@ -340,7 +340,7 @@ sub _renderList {
 		if ($entry->{kind} eq 'youtube#channel') {
 			my $id = $entry->{id};
 						
-			$item->{passthrough} = [ { channelId => $id } ];
+			$item->{passthrough} = [ { channelId => $id, type => 'video,playlist' } ];
 			#$item->{type}		= 'search';
 			$item->{url}        = \&videoSearchHandler;
 			#$item->{play}		= 'ytplaylist://channelId=' . $id;
@@ -401,7 +401,7 @@ sub _getImage {
 	my $image;
 	
 	if (my $thumbs = $imageList) {
-		foreach ( qw(maxres standard high medium default) ) {
+		foreach ( qw(default maxres standard high medium) ) {
 			last if $image = $thumbs->{$_}->{url};
 		}
 	}
