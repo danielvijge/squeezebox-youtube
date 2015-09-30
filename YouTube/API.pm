@@ -34,48 +34,14 @@ sub search {
 	_pagedCall('search', $args, $cb);
 }
 
-sub searchVideos {
-	my ( $class, $cb, $args ) = @_;
-	
-	$args ||= {};
-	$args->{type} ||= 'video';
-	$class->search($cb, $args);
-}	
-
-sub searchChannels {
-	my ( $class, $cb, $args ) = @_;
-	
-	$args ||= {};
-	$args->{type} = 'channel';
-	$class->search($cb, $args);
-}
-
-sub searchChannelsDirect {
-	my ( $class, $cb, $args ) = @_;
+sub searchDirect {
+	my ( $class, $type, $cb, $args ) = @_;
 	
 	$args ||= {};
 	
-	_pagedCall('channels', {
+	_pagedCall( $type, {
 		%{$args},
 		_noRegion 	=> 1,
-	}, $cb);
-}
-
-sub searchPlaylists {
-	my ( $class, $cb, $args ) = @_;
-	
-	$args ||= {};
-	$args->{type} = 'playlist';
-	$class->search($cb, $args);
-}
-
-sub getPlaylist {
-	my ( $class, $cb, $args ) = @_;
-	
-	_pagedCall('playlistItems', {
-		playlistId => $args->{playlistId},
-		_noRegion  => 1,
-		quota	   => $args->{quota},
 	}, $cb);
 }
 
@@ -115,9 +81,8 @@ sub getVideoDetails {
 sub _pagedCall {
 	my ( $method, $args, $cb ) = @_;
 	
-	my $maxItems = delete $args->{maxItems} || $prefs->get('max_items');
-	my $wantedItems = min(delete $args->{quota}, $maxItems);
-		
+	my $wantedItems = min(delete $args->{quota} || $prefs->get('max_items'));
+				
 	my $items = [];
 		
 	my $pagingCb;
@@ -136,7 +101,7 @@ sub _pagedCall {
 			_call($method, $args, $pagingCb);
 		}
 		else {
-			my $total = min($results->{'pageInfo'}->{'totalResults'} || scalar @$items, $maxItems);
+			my $total = min($results->{'pageInfo'}->{'totalResults'} || scalar @$items, $prefs->get('max_items'));
 			main::INFOLOG && $log->info("Got all we wanted. Return " . scalar @$items . " items.");
 			$cb->( { items => $items, total  => $total } );
 		}
