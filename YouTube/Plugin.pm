@@ -43,12 +43,12 @@ $prefs->init({
 });
 
 tie my %recentlyPlayed, 'Tie::Cache::LRU', 50;
+my $convertCountry = { EN => 'US' };
 
 sub setCountry {
-	my $convert = { EN => 'US', FR => 'FR' };
 	my $lang = Slim::Utils::Strings::getLanguage();
 	
-	$lang = $convert->{$lang} if $convert->{$lang};
+	$lang = $convertCountry->{$lang} if $convertCountry->{$lang};
 	
 	return $lang;
 }
@@ -93,6 +93,8 @@ sub initPlugin {
 	for my $recent (reverse @{$prefs->get('recent')}) {
 		$recentlyPlayed{ $recent->{'url'} } = $recent;
 	}
+	
+	$prefs->set('country', $convertCountry->{$prefs->get('country')}) if $convertCountry->{$prefs->get('country')};
 	
 #        |requires Client
 #        |  |is a Query
@@ -148,7 +150,7 @@ sub toplevel {
 		return;
 	}
 	
-	if (!Slim::Networking::Async::HTTP::hasSSL()) {
+	if (!Slim::Networking::Async::HTTP::hasSSL() || !eval { require IO::Socket::SSL } ) {
 		$callback->([
 			{ name => cstring($client, 'PLUGIN_YOUTUBE_MISSINGSSL'), type => 'text' },
 		]);

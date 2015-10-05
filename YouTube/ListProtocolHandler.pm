@@ -42,14 +42,15 @@ sub overridePlayback {
 
 sub createPlaylist {
 	my ( $client, $items ) = @_;
-	my @urls;
+	my @tracks;
 		
 	for my $item (@{$items}) {
-		push @urls, $item->{play} if $item->{play};
-	}	
+		push @tracks, Slim::Schema->updateOrCreate( {
+				'url'        => $item->{play} });
+	}
 	
 	$client->execute([ 'playlist', 'clear' ]);
-	$client->execute([ 'playlist', 'addtracks', 'listRef', \@urls ]);
+	$client->execute([ 'playlist', 'addtracks', 'listRef', \@tracks ]);
 	$client->execute([ 'play' ]);
 }
 
