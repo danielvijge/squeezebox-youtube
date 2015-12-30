@@ -20,6 +20,10 @@ use strict;
 use warnings;
 use JSON::XS;
 
+use Slim::Utils::Log;
+
+my $log = logger('plugin.youtube');
+
 my @_OPERATORS = (
     ['|', sub { my ($a, $b) = @_; return $a | $b }],
     ['^', sub { my ($a, $b) = @_; return $a ^ $b }],
@@ -381,25 +385,24 @@ sub extract_object {
     return $obj;
 }
 
-#(?:function\s+\Q$funcname\E|[{;]\Q$funcname\E\s*=\s*function)\s*
 
 sub extract_function {
     my ($self, $depth, $funcname) = @_;
     $self->progress($depth, "--", "Extract $funcname");
 	my $args;
     my $code;
+	
+	$log->debug("JS function: $funcname $self->{code}");
 
-	if (($self->{code} =~ /(?:function\s+\Q$funcname\E|[{;]\Q$funcname\E\s*=\s*function)\s*
-                \(([^)]*)\)\s*
-                \{([^}]+)\}/x)) {
-		$args = $1;
-		$code = $2;
-	} elsif (($self->{code} =~ /(?:var\s+\Q$funcname\E\s*=\s*function)\s*
+# Python version : (?:function\s+%s|[{;,]%s\s*=\s*function|var\s+%s\s*=\s*function)\s*	
+
+	if (($self->{code} =~ /(?:function\s+\Q$funcname\E|[{;,]\Q$funcname\E\s*=\s*function|var\s+\Q$funcname\E\s*=\s*function)\s*
                 \(([^)]*)\)\s*
                 \{([^}]+)\}/x)) {
 		$args = $1;
 		$code = $2;
 	} else {
+		$log->error("Could not find JS function: $funcname");
 		die "Could not find JS function '$funcname'";
     }
 
