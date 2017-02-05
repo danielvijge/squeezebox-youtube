@@ -18,12 +18,15 @@ PLUGIN_YOUTUBE_MISSINGKEY
 	
 PLUGIN_YOUTUBE_MISSINGSSL
 	EN	SSL required (try to install it using CPAN and/or on Linux do "sudo apt-get install libio-socket-ssl-perl libnet-ssleay-perl")
-
-PLUGIN_YOUTUBE_SEARCH
-	EN	YouTube Search
+	
+PLUGIN_YOUTUBE_MISSINGOAUTH
+	EN	Oauth configuration missing, please see YouTube plugin settings
 	
 PLUGIN_YOUTUBE_NA
 	EN	n/a
+
+PLUGIN_YOUTUBE_VIDEOSEARCH
+	EN	Video Search
 	
 PLUGIN_YOUTUBE_MUSICSEARCH
 	EN	Music Search
@@ -33,6 +36,12 @@ PLUGIN_YOUTUBE_CHANNELSEARCH
 
 PLUGIN_YOUTUBE_PLAYLISTSEARCH
 	EN	Playlist Search
+	
+PLUGIN_YOUTUBE_MYSUBSCRIPTIONS
+	EN	My Subscriptions
+	
+PLUGIN_YOUTUBE_MYPLAYLISTS
+	EN	My Playlists
 
 PLUGIN_YOUTUBE_GUIDECATEGORIES
 	EN	Guided Channels 
@@ -119,7 +128,56 @@ PLUGIN_YOUTUBE_PREFIX
 	
 PLUGIN_YOUTUBE_SUFFIX
 	EN	Suffix
+	
+PLUGIN_YOUTUBE_CLIENTID
+	EN	Client ID
+	
+PLUGIN_YOUTUBE_CLIENTID_DESC
+	EN	Client ID as found on your google console page https://console.developers.google.com/apis/dashboard?
 
+PLUGIN_YOUTUBE_CLIENTSECRET
+	EN	Client Secret
+	
+PLUGIN_YOUTUBE_CLIENTSECRET_DESC
+	EN	Client ID as found on your google console page https://console.developers.google.com/apis/dashboard?
+		
+PLUGIN_YOUTUBE_OAUTH
+	EN	Oauth2 authorization
+	
+PLUGIN_YOUTUBE_CLIENTOAUTH_DESC
+	EN	Click on the link to go to google console and authorize the plugin to <b>read</b> your YouTube account
+	EN	Clearing the access token will force a refresh 
+	
+PLUGIN_YOUTUBE_OAUTHLINK
+	EN	Click here to authorize
+	
+PLUGIN_YOUTUBE_GETCODE
+	EN	"Get Code"
+	
+PLUGIN_YOUTUBE_REFRESH
+	EN	"Refresh"
+	
+PLUGIN_YOUTUBE_OAUTHCODE
+	EN	and enter this code
+	
+PLUGIN_YOUTUBE_CLEARTOKEN
+	EN	Clear access token
+	
+PLUGIN_YOUTUBE_OAUTHHOWTO
+	EN	How to use personal account
+	
+PLUGIN_YOUTUBE_OAUTHHOWTO_TEXT
+	EN	- go to <a href="https://console.developers.google.com/apis/credentials?" target="none">Google Console Credentials</a> 
+	EN	and select your YouTube project
+	EN	<br>- select "Create credentials", then "OAuth client ID" and then "Other" 
+	EN	<br>- choose a name or leave the default
+	EN	<br>- click "Create", this will generate a Client ID and Secret
+	EN	<br>- paste "Client ID" and "Client secret" here and click "Apply"
+	EN	<br>- click "Get Code" and if nothing appears to its right, just click "Refresh" or refresh this LMS page
+	EN	<br>- copy the code in red and click "Click here to authorize" link . You'll be prompted by YouTube to enter the code
+	EN	<br>- return to the LMS main screen, you can now use "My Subcriptions" and "My Playlists"
+	EN	<br>- to remove authorizations, go to <a href="https://myaccount.google.com/permissions" target="none">Google Console Permissions</a>	
+	
 
 
 	
