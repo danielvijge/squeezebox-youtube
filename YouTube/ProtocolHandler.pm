@@ -20,7 +20,7 @@ use Slim::Utils::Cache;
 
 use Plugins::YouTube::Signature;
 
-use constant MAX_INBUF  => 102400;
+use constant MAX_INBUF  => 128*1024;
 use constant MAX_OUTBUF => 4096;
 use constant MAX_READ   => 32768;
 use constant EBML_NEED  => 12;
