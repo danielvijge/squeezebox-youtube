@@ -456,8 +456,8 @@ sub getEBML {
 	
 	if ($len == 5) {
 		$log->error("wrong len: $len, $c");
-		#arbitrary, but at least won't get stuck in the an infinite loop
-		$len = 1024; 	
+		# arbitrary, but at least won't get stuck in the an infinite loop and will not go beyond available data
+		$len = EBML_NEED; 	
 		$$in = substr($$in, $len);
 		return $len;
 	}
